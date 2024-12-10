@@ -159,3 +159,28 @@ class Graph:
             return self.kruskal_algorithm()
         else:
             raise ValueError("Thuật toán không hợp lệ. Vui lòng chọn 'prim' hoặc 'kruskal'.")
+        
+    
+    def graph_coloring(self):
+        """Tô màu đồ thị sử dụng thuật toán Greedy (tham lam)."""
+        # Khởi tạo màu cho tất cả các đỉnh là None
+        color_assignment = {vertex_data: None for vertex_data in self.vertices}
+        
+        # Danh sách các màu có thể sử dụng
+        available_colors = list(range(1, len(self.vertices) + 1))  # Duy trì số màu tối đa tương ứng với số đỉnh
+        
+        for vertex_data in self.vertices:
+            vertex = self.vertices[vertex_data]
+            # Tìm các màu của các đỉnh kề với vertex
+            adjacent_colors = set()
+            for neighbor, _ in vertex.adjacent.items():
+                if color_assignment[neighbor.data] is not None:
+                    adjacent_colors.add(color_assignment[neighbor.data])
+
+            # Chọn màu cho vertex, màu chưa bị sử dụng bởi các đỉnh kề
+            for color in available_colors:
+                if color not in adjacent_colors:
+                    color_assignment[vertex_data] = color
+                    break
+
+        return color_assignment    
