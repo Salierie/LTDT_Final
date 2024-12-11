@@ -65,8 +65,12 @@ class Graph:
             for neighbor, weight in vertex.adjacent.items():
                 self.create_edge(self.neo4j_conn, vertex_data, neighbor.data, weight)
 
-    #1 . Thuật toán tìm đường đi ngắn nhất
-
+    ''' 
+    -------------------------------------------
+        1 . Thuật toán tìm đường đi ngắn nhất
+    -------------------------------------------
+    '''
+    # Thuật toán Dijkstra
     def dijkstra(self, start_data):
         if start_data not in self.vertices:
             return "Start vertex not found"
@@ -111,7 +115,110 @@ class Graph:
             MERGE (a)-[:SHORTEST_PATH]->(b)
             """, parameters={"from_data": from_vertex, "to_data": to_vertex})
 
-    # 5.1. Thuật toán Prim: tìm cây khung nhỏ nhất của đồ thị 
+    '''
+    ---------------------------------------------    
+        2 . Thuật toán tìm chu trình euler
+    ---------------------------------------------
+    '''
+    # Thuật toán Fleury
+    def fleury_algorithm(self):
+        """
+        Thuật toán Fleury để tìm chu trình Euler.
+        """
+
+        def is_bridge(u, v):
+            """Kiểm tra xem cạnh (u, v) có phải cầu không."""
+            original_count = self._count_connected_components()
+            self.remove_edge(u, v)
+            new_count = self._count_connected_components()
+            self.add_edge(u, v, 1)  # Khôi phục cạnh
+            return new_count > original_count
+
+        def has_eulerian_circuit():
+            """Kiểm tra xem đồ thị có chu trình Euler không."""
+            odd_degree_count = sum(len(v.adjacent) % 2 for v in self.vertices.values())
+            return odd_degree_count == 0
+
+        if not has_eulerian_circuit():
+            return "Đồ thị không có chu trình Euler."
+
+        circuit = []
+        current_vertex = next(iter(self.vertices))
+        while len(self.vertices[current_vertex].adjacent) > 0:
+            for neighbor in list(self.vertices[current_vertex].adjacent.keys()):
+                if not is_bridge(current_vertex, neighbor):
+                    break
+            else:
+                neighbor = next(iter(self.vertices[current_vertex].adjacent.keys()))
+
+            circuit.append((current_vertex, neighbor))
+            self.remove_edge(current_vertex, neighbor)
+            current_vertex = neighbor
+
+        return circuit
+
+    def remove_edge(self, from_data, to_data):
+        """Xóa cạnh từ đồ thị."""
+        if from_data in self.vertices and to_data in self.vertices[from_data].adjacent:
+            del self.vertices[from_data].adjacent[self.vertices[to_data]]
+            del self.vertices[to_data].adjacent[self.vertices[from_data]]
+
+
+    def save_euler_cycle(self, euler_circuit):
+        if euler_circuit:
+            for from_data, to_data in euler_circuit:
+                self.neo4j_conn.query("""
+                MATCH (a:Vertex {data: $from_data}), (b:Vertex {data: $to_data})
+                MERGE (a)-[:EULER_CIRCUIT]->(b)
+                """, parameters={"from_data": from_data, "to_data": to_data})
+
+    '''
+    ----------------------------------------------    
+        3 . Thuật toán tìm đường đi hamilton
+    ----------------------------------------------       
+    '''
+    
+    def hamiltonian_path(self):
+        """
+        Tìm đường đi Hamilton bằng backtracking.
+        """
+        def backtrack(current_vertex, visited, path):
+            if len(path) == len(self.vertices):
+                return path
+            for neighbor in self.vertices[current_vertex].adjacent:
+                if neighbor.data not in visited:
+                    visited.add(neighbor.data)
+                    path.append(neighbor.data)
+                    result = backtrack(neighbor.data, visited, path)
+                    if result:
+                        return result
+                    path.pop()
+                    visited.remove(neighbor.data)
+            return None
+
+        for start_vertex in self.vertices:
+            result = backtrack(start_vertex, {start_vertex}, [start_vertex])
+            if result:
+                return result
+        return "Không tìm thấy đường đi Hamilton."
+
+    def save_hamiltonian_path(self, hamilton_path):
+        if hamilton_path:
+            for i in range(len(hamilton_path) - 1):
+                from_data = hamilton_path[i]
+                to_data = hamilton_path[i + 1]
+                self.neo4j_conn.query("""
+                MATCH (a:Vertex {data: $from_data}), (b:Vertex {data: $to_data})
+                MERGE (a)-[:HAMILTON_PATH]->(b)
+                """, parameters={"from_data": from_data, "to_data": to_data})        
+        
+
+    '''
+    -----------------------------------------------------
+        4 . Thuật toán tìm cây khung nhỏ nhất của đồ thị
+    -----------------------------------------------------
+    '''
+    # 4.1. Thuật toán Prim
 
     def prim_algorithm(self):
         """Thuật toán Prim để tìm cây khung nhỏ nhất."""
@@ -138,7 +245,7 @@ class Graph:
 
         return spanning_tree
 
-    # 5.2. Thuật toán Kruskal: tìm cây khung nhỏ nhất của đồ thị
+    # 4.2. Thuật toán Kruskal
 
     def kruskal_algorithm(self):
         """Thuật toán Kruskal để tìm cây khung nhỏ nhất."""
@@ -198,8 +305,19 @@ class Graph:
         else:
             raise ValueError("Thuật toán không hợp lệ. Vui lòng chọn 'prim' hoặc 'kruskal'.")
         
-    # 6. Thuật toán tô màu đồ thị 
-
+    def save_spanning_tree(self, spanning_tree):
+        if spanning_tree:
+            for from_data, to_data, weight in spanning_tree:
+                self.neo4j_conn.query("""
+                MATCH (a:Vertex {data: $from_data}), (b:Vertex {data: $to_data})
+                MERGE (a)-[:SPANNING_TREE {weight: $weight}]->(b)
+                """, parameters={"from_data": from_data, "to_data": to_data, "weight": weight})
+    
+    '''
+    -------------------------------------------
+        5. Thuật toán tô màu đồ thị 
+    -------------------------------------------
+    ''' 
     def graph_coloring(self):
         """Tô màu đồ thị sử dụng thuật toán Greedy (tham lam)."""
         # Khởi tạo màu cho tất cả các đỉnh là None
@@ -223,3 +341,11 @@ class Graph:
                     break
 
         return color_assignment    
+    
+    def save_colored_graph(self, colored_graph):
+        if colored_graph:
+            for vertex_data, color in colored_graph.items():
+                self.neo4j_conn.query("""
+                MATCH (v:Vertex {data: $vertex_data})
+                SET v.color = $color
+                """, parameters={"vertex_data": vertex_data, "color": color})

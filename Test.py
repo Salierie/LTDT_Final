@@ -29,7 +29,6 @@ def visualize_colored_graph(graph, coloring_result, title):
 
 def main():
     # **Phần 1: Tìm cây khung nhỏ nhất**
-    # Tạo đồ thị phức tạp hơn
     graph = Graph()
     graph.add_vertex("A")
     graph.add_vertex("B")
@@ -67,8 +66,10 @@ def main():
     # Biểu diễn cây khung bằng Kruskal
     visualize_graph(graph, kruskal_result, "Minimum Spanning Tree (Kruskal's Algorithm)")
 
-    # **Phần 2: Tô màu đồ thị bản đồ**
-    # Tạo đồ thị mô phỏng bản đồ
+    # **Lưu cây khung nhỏ nhất**
+    graph.save_spanning_tree(prim_result)
+
+    # **Phần 2: Tô màu đồ thị**
     map_graph = Graph()
     map_graph.add_vertex("A")
     map_graph.add_vertex("B")
@@ -77,7 +78,7 @@ def main():
     map_graph.add_vertex("E")
     map_graph.add_vertex("F")
 
-    # Thêm các cạnh (các khu vực tiếp giáp)
+    # Thêm các cạnh
     map_graph.add_edge("A", "B", 1)
     map_graph.add_edge("A", "C", 1)
     map_graph.add_edge("A", "D", 1)
@@ -89,7 +90,7 @@ def main():
     map_graph.add_edge("D", "E", 1)
     map_graph.add_edge("D", "F", 1)
 
-    # Thực hiện tô màu
+    # Tô màu
     coloring_result = map_graph.graph_coloring()
     print("\nGraph Coloring Result (Map Coloring):")
     print(coloring_result)
@@ -97,6 +98,30 @@ def main():
     # Biểu diễn đồ thị đã tô màu
     visualize_colored_graph(map_graph, coloring_result, "Map Coloring Result")
 
+    # Lưu kết quả đồ thị đã tô màu
+    map_graph.save_colored_graph(coloring_result)
+
+    # **Phần 3: Tìm chu trình Euler**
+    euler_circuit = graph.fleury_algorithm()
+    print("\nEuler Circuit:")
+    print(euler_circuit)
+
+    # Biểu diễn chu trình Euler
+    if euler_circuit:
+        visualize_graph(graph, euler_circuit, "Euler Circuit")
+        graph.save_euler_cycle(euler_circuit)
+
+    # **Phần 4: Tìm đường đi Hamilton**
+    hamilton_path = graph.hamiltonian_path()
+    print("\nHamilton Path:")
+    print(hamilton_path)
+
+    # Biểu diễn đường đi Hamilton
+    if hamilton_path:
+        hamilton_edges = [(hamilton_path[i], hamilton_path[i + 1], 1) 
+                          for i in range(len(hamilton_path) - 1)]
+        visualize_graph(graph, hamilton_edges, "Hamilton Path")
+        graph.save_hamiltonian_path(hamilton_path)
 
 if __name__ == "__main__":
     main()
