@@ -1,23 +1,10 @@
 import pandas as pd
-from neo4j import GraphDatabase
-
 import heapq
 
-class Neo4jConnection:
-    def __init__(self, uri, user, pwd):
-        self.uri = uri
-        self.user = user
-        self.pwd = pwd
-        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
-        self.session = self.driver.session()
+'''
+    Đoạn mã dùng để xây dựng đồ thị và cài đặt các thuật toán 
 
-    def close(self):
-        self.session.close()
-
-    def query(self, query, parameters=None):
-        result = self.session.run(query, parameters or {})
-        return result
-
+'''
 class Vertex:
     def __init__(self, data):
         self.data = data
@@ -78,6 +65,53 @@ class Graph:
             for neighbor, weight in vertex.adjacent.items():
                 self.create_edge(self.neo4j_conn, vertex_data, neighbor.data, weight)
 
+    #1 . Thuật toán tìm đường đi ngắn nhất
+
+    def dijkstra(self, start_data):
+        if start_data not in self.vertices:
+            return "Start vertex not found"
+
+        start_vertex = self.vertices[start_data]
+        start_vertex.distance = 0
+
+        unvisited = list(self.vertices.values())
+
+        log_steps = []
+
+        while unvisited:
+            current = min(unvisited, key=lambda vertex: vertex.distance)
+            if current.distance == float('inf'):
+                break
+
+            current.visited = True
+            unvisited.remove(current)
+
+            for neighbor, weight in current.adjacent.items():
+                if not neighbor.visited:
+                    alt_distance = current.distance + weight
+                    if alt_distance < neighbor.distance:
+                        neighbor.distance = alt_distance
+                        neighbor.previous = current
+
+            log_steps.append({
+                'Current Node': current.data,
+                'Visited Nodes': [v.data for v in self.vertices.values() if v.visited],
+                'Distances': {v.data: v.distance for v in self.vertices.values()}
+            })
+
+        df_log = pd.DataFrame(log_steps)
+        return df_log
+
+    def save_shortest_path_to_neo4j(self, path):
+        for i in range(len(path) - 1):
+            from_vertex = path[i]
+            to_vertex = path[i + 1]
+            self.neo4j_conn.query("""
+            MATCH (a:Vertex {data: $from_data}), (b:Vertex {data: $to_data})
+            MERGE (a)-[:SHORTEST_PATH]->(b)
+            """, parameters={"from_data": from_vertex, "to_data": to_vertex})
+
+    # 5.1. Thuật toán Prim: tìm cây khung nhỏ nhất của đồ thị 
 
     def prim_algorithm(self):
         """Thuật toán Prim để tìm cây khung nhỏ nhất."""
@@ -103,6 +137,8 @@ class Graph:
                 spanning_tree.append((current_vertex.previous.data, current_vertex.data, current_distance))
 
         return spanning_tree
+
+    # 5.2. Thuật toán Kruskal: tìm cây khung nhỏ nhất của đồ thị
 
     def kruskal_algorithm(self):
         """Thuật toán Kruskal để tìm cây khung nhỏ nhất."""
@@ -148,6 +184,8 @@ class Graph:
 
         return spanning_tree
 
+    # Hàm chọn thuật toán tìm cây khung nhỏ nhất
+
     def find_spanning_tree(self, algorithm="prim"):
         """
         Hàm cho phép người dùng chọn 1 trong 2 thuật toán tìm cây khung trên để tìm cây khung nhỏ nhất.
@@ -160,7 +198,8 @@ class Graph:
         else:
             raise ValueError("Thuật toán không hợp lệ. Vui lòng chọn 'prim' hoặc 'kruskal'.")
         
-    
+    # 6. Thuật toán tô màu đồ thị 
+
     def graph_coloring(self):
         """Tô màu đồ thị sử dụng thuật toán Greedy (tham lam)."""
         # Khởi tạo màu cho tất cả các đỉnh là None
