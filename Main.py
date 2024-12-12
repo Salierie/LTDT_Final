@@ -120,72 +120,153 @@ class Graph:
         2 . Thuật toán tìm chu trình euler
     ---------------------------------------------
     '''
-    # Thuật toán Fleury
+    def _count_connected_components(self):
+        """Đếm số thành phần liên thông của đồ thị."""
+        visited = set()
+        count = 0
+        
+        def dfs(vertex):
+            visited.add(vertex)
+            for neighbor in self.vertices[vertex].adjacent:
+                if neighbor.data not in visited:
+                    dfs(neighbor.data)
+        
+        for vertex in self.vertices:
+            if vertex not in visited:
+                dfs(vertex)
+                count += 1
+        return count
+    
     def fleury_algorithm(self):
         """Thuật toán Fleury để tìm chu trình Euler."""
         log_steps = []
-        
-        def is_bridge(u, v):
-            original_count = self._count_connected_components()
-            self.remove_edge(u, v)
-            new_count = self._count_connected_components()
-            self.add_edge(u, v, 1)
-            return new_count > original_count
-
+    
+        def is_bridge(u_data, v_data):
+            """Kiểm tra xem cạnh (u, v) có phải cầu không."""
+            temp_adjacent = {}
+            for vertex in self.vertices:
+                temp_adjacent[vertex] = {
+                    n.data: w for n, w in self.vertices[vertex].adjacent.items()
+                }
+            
+            temp_adjacent[u_data].pop(v_data, None)
+            temp_adjacent[v_data].pop(u_data, None)
+            
+            visited = set()
+            def dfs(vertex):
+                visited.add(vertex)
+                for neighbor in temp_adjacent[vertex]:
+                    if neighbor not in visited:
+                        dfs(neighbor)
+            
+            dfs(u_data)
+            return len(visited) != len(self.vertices)
+    
         def has_eulerian_circuit():
             """Kiểm tra xem đồ thị có chu trình Euler không."""
-            odd_degree_count = sum(len(v.adjacent) % 2 for v in self.vertices.values())
-            return odd_degree_count == 0
-
+            for vertex in self.vertices.values():
+                if len(vertex.adjacent) % 2 != 0:
+                    return False
+            return True
+    
+        # Kiểm tra điều kiện tồn tại chu trình Euler
         if not has_eulerian_circuit():
-            return "Đồ thị không có chu trình Euler."
-
-        circuit = []
-        current_vertex = next(iter(self.vertices))
-        
-        while len(self.vertices[current_vertex].adjacent) > 0:
-            for neighbor in list(self.vertices[current_vertex].adjacent.keys()):
-                if not is_bridge(current_vertex, neighbor):
-                    break
-            else:
-                neighbor = next(iter(self.vertices[current_vertex].adjacent.keys()))
-
-            circuit.append((current_vertex, neighbor))
-            self.remove_edge(current_vertex, neighbor)
-            
             log_steps.append({
-                'Current Vertex': current_vertex,
-                'Next Vertex': neighbor,
-                'Current Circuit': circuit.copy(),
-                'Remaining Edges': [(v.data, n.data) for v in self.vertices.values() for n in v.adjacent]
+                'Step': 'Check Euler Circuit',
+                'Current State': 'Failed',
+                'Message': 'Đồ thị không có chu trình Euler',
+                'Circuit': []
             })
+            return pd.DataFrame(log_steps)
+    
+        # Tạo bản sao của đồ thị
+        remaining_edges = {}
+        for vertex in self.vertices:
+            remaining_edges[vertex] = {
+                n.data: w for n, w in self.vertices[vertex].adjacent.items()
+            }
+    
+        circuit = []
+        current = next(iter(self.vertices))
+    
+        # Ghi lại trạng thái ban đầu
+        log_steps.append({
+            'Step': 'Initial State',
+            'Current Vertex': current,
+            'Remaining Edges': str({v: list(edges.keys()) for v, edges in remaining_edges.items()}),
+            'Circuit': []
+        })
+    
+        while any(remaining_edges[v] for v in remaining_edges):
+            # Tìm đỉnh kế tiếp
+            next_vertex = None
+            for neighbor in list(remaining_edges[current].keys()):
+                if not is_bridge(current, neighbor) or len(remaining_edges[current]) == 1:
+                    next_vertex = neighbor
+                    break
+                
+            if next_vertex is None and remaining_edges[current]:
+                next_vertex = list(remaining_edges[current].keys())[0]
             
-            current_vertex = neighbor
-
+            if next_vertex:
+                # Thêm cạnh vào chu trình
+                circuit.append((current, next_vertex))
+                
+                # Xóa cạnh đã đi qua
+                remaining_edges[current].pop(next_vertex)
+                remaining_edges[next_vertex].pop(current)
+                
+                # Ghi lại bước thực hiện
+                log_steps.append({
+                    'Step': f'Move {len(circuit)}',
+                    'Current Vertex': current,
+                    'Next Vertex': next_vertex,
+                    'Remaining Edges': str({v: list(edges.keys()) for v, edges in remaining_edges.items()}),
+                    'Circuit': str(circuit)
+                })
+                
+                current = next_vertex
+            else:
+                break
+            
+        # Ghi lại trạng thái cuối cùng
+        log_steps.append({
+            'Step': 'Final State',
+            'Current Vertex': current,
+            'Circuit': str(circuit),
+            'Message': 'Completed'
+        })
+    
         return pd.DataFrame(log_steps)
-
+    
     def remove_edge(self, from_data, to_data):
         """Xóa cạnh từ đồ thị."""
-        if from_data in self.vertices and to_data in self.vertices[from_data].adjacent:
-            del self.vertices[from_data].adjacent[self.vertices[to_data]]
-            del self.vertices[to_data].adjacent[self.vertices[from_data]]
-
-
-    def save_euler_cycle_to_neo4j(self, euler_circuit):
+        if from_data in self.vertices and to_data in self.vertices:
+            if self.vertices[to_data] in self.vertices[from_data].adjacent:
+                del self.vertices[from_data].adjacent[self.vertices[to_data]]
+                del self.vertices[to_data].adjacent[self.vertices[from_data]]
+                # Xóa cạnh từ danh sách edges nếu cần
+                self.edges = [edge for edge in self.edges 
+                             if not ((edge.from_vertex.data == from_data and edge.to_vertex.data == to_data) or 
+                                    (edge.from_vertex.data == to_data and edge.to_vertex.data == from_data))]
+    
+    def save_euler_cycle(self, euler_circuit):
         """Lưu chu trình Euler vào Neo4j."""
-        # Xóa các quan hệ EULER_CYCLE cũ
-        self.neo4j_conn.query("MATCH ()-[r:EULER_CYCLE]->() DELETE r")
-        
-        # Tạo các quan hệ mới cho chu trình Euler
-        for i, (from_vertex, to_vertex) in enumerate(euler_circuit):
-            self.neo4j_conn.query("""
-            MATCH (a:Vertex {data: $from_data}), (b:Vertex {data: $to_data})
-            CREATE (a)-[:EULER_CYCLE {order: $order}]->(b)
-            """, parameters={
-                "from_data": from_vertex,
-                "to_data": to_vertex,
-                "order": i
-            })
+        if not isinstance(euler_circuit, str) and euler_circuit:  # Kiểm tra không phải là thông báo lỗi
+            # Xóa các quan hệ EULER_CIRCUIT cũ
+            if self.neo4j_conn:
+                self.neo4j_conn.query("MATCH ()-[r:EULER_CIRCUIT]->() DELETE r")
+                
+                # Tạo các quan hệ mới cho chu trình Euler
+                for idx, (from_data, to_data) in enumerate(euler_circuit):
+                    self.neo4j_conn.query("""
+                    MATCH (a:Vertex {data: $from_data}), (b:Vertex {data: $to_data})
+                    CREATE (a)-[:EULER_CIRCUIT {order: $order}]->(b)
+                    """, parameters={
+                        "from_data": from_data,
+                        "to_data": to_data,
+                        "order": idx
+                    })
 
     '''
     ----------------------------------------------    
@@ -225,8 +306,6 @@ class Graph:
             
         return "Không tìm thấy đường đi Hamilton."
 
-    def save_hamiltonian_path(self, hamilton_path):
-        pass
 
     '''
     -----------------------------------------------------
